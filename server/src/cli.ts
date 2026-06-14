@@ -54,10 +54,7 @@ export function runCli() {
 export function listen() {
   // Create a connection for the server.
   // The connection uses stdin/stdout for communication.
-  const connection = LSP.createConnection(
-    new LSP.StreamMessageReader(process.stdin),
-    new LSP.StreamMessageWriter(process.stdout),
-  )
+  const connection = LSP.createConnection(process.stdin, process.stdout)
 
   connection.onInitialize(
     async (params: LSP.InitializeParams): Promise<LSP.InitializeResult> => {
