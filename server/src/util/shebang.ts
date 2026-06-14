@@ -13,7 +13,7 @@ const SHEBANG_INTERPRETER_REGEXP = /^[/](?:[^ /]+[/])*(?:env +(?:-S +)?)?([^ /]+
 // (the first continuous run of such lines in a file is the region eligible for
 //  a `shell=...` directive)
 const SHELL_DIRECTIVE_OR_EMPTY_REGEXP =
-  /^\s*(?:#\s*(?:shellcheck|rcsh-ls)\s+(?:\S+\s+)*shell=(\w+)|#|$)/
+  /^\s*(?:#\s*rcsh-ls\s+(?:\S+\s+)*shell=(\w+)|#|$)/
 
 export const RC_DIALECTS = ['rc', 'rcsh'] as const
 type RcDialect = (typeof RC_DIALECTS)[number]

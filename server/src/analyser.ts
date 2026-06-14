@@ -413,7 +413,7 @@ export default class Analyzer {
         // NOTE: a reference can be a command, variable, function, etc.
         namedNode = n
       } else if (TreeSitterUtil.isDefinition(n)) {
-        namedNode = n
+        namedNode = TreeSitterUtil.symbolNode(n)
       }
 
       if (namedNode && TreeSitterUtil.symbolName(namedNode) === word) {

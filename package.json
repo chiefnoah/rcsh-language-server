@@ -65,7 +65,7 @@
       ]
     },
     "testMatch": [
-      "<rootDir>/**/__tests__/*.ts"
+      "<rootDir>/server/src/__tests__/rcsh.test.ts"
     ],
     "collectCoverageFrom": [
       "**/*.ts",

@@ -2,13 +2,13 @@
   "name": "rcsh-ide-vscode",
   "displayName": "rcsh IDE",
   "description": "A language server for the Plan 9 rc shell",
-  "author": "Mads Hartmann",
+  "author": "Noah",
   "license": "MIT",
   "version": "1.43.1",
-  "publisher": "mads-hartmann",
+  "publisher": "chiefnoah",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/chiefnoah/rcsh-language-server"
   },
   "engines": {
     "vscode": "^1.44.0"
@@ -61,7 +61,7 @@
         },
         "rcshIde.globPattern": {
           "type": "string",
-          "default": "**/*.rcsh",
+          "default": "**/*@(.rcsh|.rc)",
           "description": "Glob pattern for finding and parsing shell script files in the workspace. Used by the background analysis features across files."
         },
         "rcshIde.includeAllWorkspaceSymbols": {
@@ -79,7 +79,7 @@
             "error"
           ],
           "description": "Controls the log level of the language server."
-        },
+        }
       }
     }
   },

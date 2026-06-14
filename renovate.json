@@ -6,5 +6,5 @@
       "automerge": true
     }
   ],
-  "ignoreDeps": ["bash-language-server"]
+  "ignoreDeps": ["rcsh-language-server"]
 }

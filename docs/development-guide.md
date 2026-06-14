@@ -5,7 +5,7 @@ There are two moving parts.
 - **Server**: A node server written in Typescript that implements the
   [Language Server Protocol (LSP)][lsp].
 
-**Client**: A Visual Studio Code (vscode) extension which wraps the LSP server.
+- **Client**: A Visual Studio Code (vscode) extension which wraps the LSP server.
 
 The project has a root `package.json` file which is really just there for
 convenience - it proxies to the `package.json` files in the `vscode-client` and
@@ -48,6 +48,18 @@ To support a good develop workflow we set up [eslint][eslint], [Prettier][pretti
     pnpm test
     pnpm test:coverage
 
+## Working on the parser
+
+The server uses `server/tree-sitter-rcsh.wasm`, generated from the rcsh
+tree-sitter grammar. To refresh it from a local grammar checkout:
+
+```
+sh scripts/upgrade-tree-sitter.sh /path/to/tree-sitter-rcsh
+```
+
+The script regenerates the grammar, builds the wasm parser, copies it into the
+server package, and records the grammar commit in `server/parser.info`.
+
 ## Working on the client
 
 ### Visual Studio Code
@@ -56,11 +68,6 @@ Working on the client is simply a matter of starting vscode and using the Debug
 View to launch the `Launch Client` task. This will open a new vscode window with the
 extension loaded. It also looks for changes to your client code and recompiles
 it whenever you save your changes.
-
-### Atom
-
-See the [ide-bash][ide-bash] package for Atom. Due to how Atom packages are
-published the client lives in a separate repository.
 
 ## Working on the server (VS Code)
 
@@ -89,7 +96,7 @@ then you can hack the `server/util/logger` with:
 ```typescript
 const fs = require('fs')
 const util = require('util')
-const log_file = fs.createWriteStream(`/tmp/bash-language-server-debug.log`, {
+const log_file = fs.createWriteStream(`/tmp/rcsh-language-server-debug.log`, {
   flags: 'w',
 })
 
@@ -105,7 +112,6 @@ To analyze the performance of the extension or server using the Chrome inspector
 2. Open `chrome://inspect` in Chrome and ensure the port `localhost:6009` is added
 
 [lsp]: https://microsoft.github.io/language-server-protocol/
-[ide-bash]: https://github.com/bash-lsp/ide-bash
 [jest]: https://facebook.github.io/jest/
 [prettier]: https://prettier.io/
 [eslint]: https://eslint.org/

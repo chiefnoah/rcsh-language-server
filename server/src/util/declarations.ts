@@ -22,7 +22,7 @@ const GLOBAL_DECLARATION_LEAF_NODE_TYPES = new Set([
  * as we do not do any flow tracing.
  *
  * Will only return one declaration per symbol name – the latest definition.
- * This behavior is consistent with how Bash behaves, but differs between
+ * This behavior is consistent with how rc behaves, but differs between
  * LSP servers.
  *
  * Used when finding declarations for sourced files and to get declarations
@@ -77,7 +77,7 @@ export function getAllDeclarationsInTree({
 
 /**
  * Returns declarations available for the given file and location.
- * The heuristics used is a simplification compared to bash behaviour,
+ * The heuristics used is a simplification compared to rc behavior,
  * but deemed good enough, compared to the complexity of flow tracing.
  *
  * Used when getting declarations for the current scope.
@@ -171,7 +171,7 @@ function nodeToSymbolInformation({
   return LSP.SymbolInformation.create(
     TreeSitterUtil.symbolName(node),
     kind || LSP.SymbolKind.Variable,
-    TreeSitterUtil.range(node),
+    TreeSitterUtil.range(TreeSitterUtil.symbolNode(node) ?? node),
     uri,
   )
 }
@@ -248,7 +248,7 @@ export function findDeclarationUsingGlobalSemantics({
         isDefinedVariableInExpression(n.nextNamedSibling, n, position)
 
       if (TreeSitterUtil.symbolName(n) === word && !definedVariableInExpression) {
-        declaration = n
+        declaration = TreeSitterUtil.symbolNode(n) ?? n
         continueSearching = false
 
         return false
@@ -262,7 +262,7 @@ export function findDeclarationUsingGlobalSemantics({
       n.type === 'variable' &&
       TreeSitterUtil.symbolName(n) === word
     ) {
-      declaration = n
+      declaration = TreeSitterUtil.symbolNode(n) ?? n
       continueSearching = false
       return false
     }
@@ -272,7 +272,7 @@ export function findDeclarationUsingGlobalSemantics({
       TreeSitterUtil.isFunctionDefinition(n) &&
       TreeSitterUtil.symbolName(n) === word
     ) {
-      declaration = n
+      declaration = TreeSitterUtil.symbolNode(n) ?? n
       continueSearching = false
       return false
     }

@@ -38,24 +38,50 @@ export function isReference(n: SyntaxNode): boolean {
 }
 
 export function symbolName(n: SyntaxNode): string {
-  if (n.type !== 'variable') {
-    return n.text
+  if (n.type === 'variable') {
+    return n.text.replace(/^\$(?:[#^"])?/, '')
   }
 
-  return n.text.replace(/^\$(?:[#^"])?/, '')
+  return symbolNode(n)?.text ?? n.text
+}
+
+export function symbolNode(n: SyntaxNode): SyntaxNode | null {
+  if (n.type === 'function_definition' || n.type === 'variable_assignment') {
+    return n.childForFieldName('name') ?? n.namedChildren.find((c) => c.type === 'word') ?? null
+  }
+
+  return n
 }
 
 export function isFunctionDefinition(n: SyntaxNode): boolean {
+  if (n.type === 'function_definition') {
+    return true
+  }
+
   return (
     n.type === 'word' &&
+    n.parent?.type !== 'function_definition' &&
     n.previousNamedSibling?.type === 'keyword' &&
     n.previousNamedSibling.text === 'fn'
   )
 }
 
 export function isVariableAssignment(n: SyntaxNode): boolean {
+  if (n.type === 'variable_assignment') {
+    return true
+  }
+
+  const previous = n.previousNamedSibling
+  const isAtAssignmentBoundary =
+    !previous ||
+    previous.type === 'terminator' ||
+    (previous.type === 'delimiter' && ['(', '{'].includes(previous.text)) ||
+    (previous.type === 'operator' && ['&&', '||', '|', '&'].includes(previous.text))
+
   return (
     n.type === 'word' &&
+    n.parent?.type !== 'variable_assignment' &&
+    isAtAssignmentBoundary &&
     n.nextNamedSibling?.type === 'operator' &&
     n.nextNamedSibling.text === '='
   )

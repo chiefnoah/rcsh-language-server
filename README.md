@@ -1,17 +1,17 @@
 # rcsh Language Server
 
-Language server for the Plan 9 rc shell, forked from bash-language-server.
+Language server for the Plan 9 rc shell.
 
 This fork keeps the LSP features that still make sense for rc:
 
 - document symbols for `fn name` and `name = ...`
 - completion for rc keywords, builtins, executables, snippets, and known symbols
 - hover/definition/references/rename for functions and variables
-- background workspace symbol indexing for `.rcsh` files
+- background workspace symbol indexing for `.rcsh` and `.rc` files
 - source following for constant `. file` commands
 
-ShellCheck, shfmt, and Bash-completion-backed option completion were removed because
-they do not understand rc.
+Upstream shell linter, formatter, and completion integrations that do not
+understand rc have been removed.
 
 ## Parser
 

@@ -1,7 +1,7 @@
 {
   "name": "rcsh-language-server",
   "description": "A language server for the Plan 9 rc shell",
-  "author": "Mads Hartmann",
+  "author": "Noah",
   "license": "MIT",
   "version": "5.7.0",
   "main": "./out/server.js",
@@ -11,13 +11,12 @@
   },
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "git+https://github.com/chiefnoah/rcsh-language-server.git"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "editorconfig": "2.0.1",
     "fast-glob": "3.3.3",
     "fuzzy-search": "3.2.1",
     "node-fetch": "2.7.0",

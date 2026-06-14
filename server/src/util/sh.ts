@@ -4,18 +4,18 @@ import { logger } from './logger'
 import { isWindows } from './platform'
 
 /**
- * Execute the following sh program.
+ * Execute the following shell program.
  */
 export function execShellScript(
   body: string,
-  cmd = isWindows() ? 'cmd.exe' : 'bash',
+  cmd = isWindows() ? 'cmd.exe' : '/bin/sh',
 ): Promise<string> {
   const args = []
 
   if (cmd === 'cmd.exe') {
     args.push('/c', body)
   } else {
-    args.push('--noprofile', '--norc', '-c', body)
+    args.push('-c', body)
   }
 
   const process = ChildProcess.spawn(cmd, args)

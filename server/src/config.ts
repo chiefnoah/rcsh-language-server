@@ -10,7 +10,7 @@ export const ConfigSchema = z.object({
   enableSourceErrorDiagnostics: z.boolean().default(false),
 
   // Glob pattern for finding and parsing shell script files in the workspace. Used by the background analysis features across files.
-  globPattern: z.string().trim().default('**/*.rcsh'),
+  globPattern: z.string().trim().default('**/*@(.rcsh|.rc)'),
 
   // Configure explainshell server endpoint in order to get hover documentation on flags and options.
   // And empty string will disable the feature.

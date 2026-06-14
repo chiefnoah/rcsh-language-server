@@ -1,6 +1,6 @@
 /**
  * A collection of async utilities.
- * If we ever need to add anything fancy, then https://github.com/vscode-shellcheck/vscode-shellcheck/blob/master/src/utils/async.ts
+ * Runs at most one async task at a time and keeps only the latest queued task.
  * is a good place to look.
  */
 
