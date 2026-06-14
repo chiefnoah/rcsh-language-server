@@ -28,6 +28,10 @@ export function isDefinition(n: SyntaxNode): boolean {
 }
 
 export function isReference(n: SyntaxNode): boolean {
+  if (isHeredocContent(n)) {
+    return false
+  }
+
   switch (n.type) {
     case 'variable':
     case 'word':
@@ -35,6 +39,28 @@ export function isReference(n: SyntaxNode): boolean {
     default:
       return false
   }
+}
+
+export function isHeredocContent(n: SyntaxNode): boolean {
+  return isHeredocBody(n) || isHeredocClosingMarker(n)
+}
+
+export function isHeredocBody(n: SyntaxNode): boolean {
+  return n.type === 'heredoc_body' || !!findParentOfType(n, 'heredoc_body')
+}
+
+export function isHeredocClosingMarker(n: SyntaxNode): boolean {
+  if (n.type !== 'word' || n.startPosition.column !== 0) {
+    return false
+  }
+
+  const redirect = n.previousNamedSibling
+  if (redirect?.type !== 'heredoc_redirect') {
+    return false
+  }
+
+  const marker = redirect.namedChildren.find((child) => child.type === 'heredoc_marker')
+  return marker?.text === n.text
 }
 
 export function symbolName(n: SyntaxNode): string {

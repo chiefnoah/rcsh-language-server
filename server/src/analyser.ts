@@ -407,6 +407,10 @@ export default class Analyzer {
     const locations: LSP.Location[] = []
 
     TreeSitterUtil.forEach(tree.rootNode, (n) => {
+      if (TreeSitterUtil.isHeredocContent(n)) {
+        return false
+      }
+
       let namedNode: Parser.SyntaxNode | null = null
 
       if (TreeSitterUtil.isReference(n)) {
@@ -427,6 +431,8 @@ export default class Analyzer {
           locations.push(LSP.Location.create(uri, range))
         }
       }
+
+      return true
     })
 
     return locations
@@ -487,6 +493,7 @@ export default class Analyzer {
 
     return baseNode
       .descendantsOfType(typeOfDescendants, startPosition)
+      .filter((n) => !TreeSitterUtil.isHeredocContent(n))
       .filter(kind === LSP.SymbolKind.Variable ? filterVariables : filterFunctions)
       .map((n) => TreeSitterUtil.range(n))
   }
@@ -544,6 +551,10 @@ export default class Analyzer {
       return {}
     }
 
+    if (TreeSitterUtil.isHeredocContent(leafNode)) {
+      return {}
+    }
+
     // explainshell needs the whole command, not just the "word" (tree-sitter
     // parlance) that the user hovered over. A relatively successful heuristic
     // is to simply go up one level in the AST. If you go up too far, you'll
@@ -589,6 +600,10 @@ export default class Analyzer {
    */
   public commandNameAtPoint(uri: string, line: number, column: number): string | null {
     let node = this.nodeAtPoint(uri, line, column)
+
+    if (node && TreeSitterUtil.isHeredocContent(node)) {
+      return null
+    }
 
     while (node?.previousNamedSibling && node.previousNamedSibling.type !== 'terminator') {
       node = node.previousNamedSibling
@@ -661,7 +676,12 @@ export default class Analyzer {
   public wordAtPoint(uri: string, line: number, column: number): string | null {
     const node = this.nodeAtPoint(uri, line, column)
 
-    if (!node || node.childCount > 0 || node.text.trim() === '') {
+    if (
+      !node ||
+      TreeSitterUtil.isHeredocContent(node) ||
+      node.childCount > 0 ||
+      node.text.trim() === ''
+    ) {
       return null
     }
 
@@ -678,6 +698,16 @@ export default class Analyzer {
     )
   }
 
+  public isHeredocContentAtTextPosition(params: LSP.TextDocumentPositionParams): boolean {
+    const node = this.nodeAtPoint(
+      params.textDocument.uri,
+      params.position.line,
+      params.position.character,
+    )
+
+    return !!node && TreeSitterUtil.isHeredocContent(node)
+  }
+
   public symbolAtPointFromTextPosition(
     params: LSP.TextDocumentPositionParams,
   ): { word: string; range: LSP.Range; kind: LSP.SymbolKind } | null {
@@ -687,7 +717,7 @@ export default class Analyzer {
       params.position.character,
     )
 
-    if (!node) {
+    if (!node || TreeSitterUtil.isHeredocContent(node)) {
       return null
     }
 

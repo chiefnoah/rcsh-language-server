@@ -103,6 +103,37 @@ describe('rcsh analyzer', () => {
       LSP.Location.create(uri, LSP.Range.create(1, 5, 1, 10)),
     ])
   })
+
+  it('treats heredoc bodies and closing markers as non-shell text', async () => {
+    const analyzer = await createAnalyzer()
+    const doc = document(
+      [
+        'real=world',
+        'cat <<EOF',
+        'fn fake {',
+        '\tbogus=$real',
+        '}',
+        'EOF',
+        'echo $real',
+        '',
+      ].join('\n'),
+    )
+
+    expect(analyzer.analyze({ document: doc, uri })).toEqual([])
+
+    expect(
+      analyzer.getDeclarationsForUri({ uri }).map((symbol) => symbol.name),
+    ).toEqual(['real'])
+    expect(analyzer.findReferences('fake')).toEqual([])
+    expect(analyzer.findReferences('bogus')).toEqual([])
+    expect(analyzer.findReferences('EOF')).toEqual([])
+    expect(analyzer.findReferences('real')).toEqual([
+      LSP.Location.create(uri, LSP.Range.create(0, 0, 0, 4)),
+      LSP.Location.create(uri, LSP.Range.create(6, 5, 6, 10)),
+    ])
+    expect(analyzer.wordAtPoint(uri, 2, 3)).toBeNull()
+    expect(analyzer.wordAtPoint(uri, 5, 1)).toBeNull()
+  })
 })
 
 describe('rcsh server', () => {
@@ -135,6 +166,52 @@ describe('rcsh server', () => {
         }),
       ]),
     )
+  })
+
+  it('does not offer completions or hover inside heredoc content', async () => {
+    const doc = document(
+      [
+        'name=world',
+        'cat <<EOF',
+        'echo $',
+        'EOF',
+        'echo $name',
+        '',
+      ].join('\n'),
+    )
+    await server.analyzeAndLintDocument(doc)
+
+    const onCompletion = connection.onCompletion.mock.calls[0][0]
+    const completions = await onCompletion(
+      {
+        textDocument: { uri },
+        position: { line: 2, character: 6 },
+      },
+      {} as any,
+      {} as any,
+    )
+
+    const onHover = connection.onHover.mock.calls[0][0]
+    const bodyHover = await onHover(
+      {
+        textDocument: { uri },
+        position: { line: 2, character: 1 },
+      },
+      {} as any,
+      {} as any,
+    )
+    const markerHover = await onHover(
+      {
+        textDocument: { uri },
+        position: { line: 3, character: 1 },
+      },
+      {} as any,
+      {} as any,
+    )
+
+    expect(completions).toEqual([])
+    expect(bodyHover).toBeNull()
+    expect(markerHover).toBeNull()
   })
 
   it('resolves rc builtin completion documentation', async () => {

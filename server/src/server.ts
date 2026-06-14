@@ -356,6 +356,10 @@ export default class RcshServer {
   // ==============================
 
   private onCompletion(params: LSP.TextDocumentPositionParams): RcCompletionItem[] {
+    if (this.analyzer.isHeredocContentAtTextPosition(params)) {
+      return []
+    }
+
     const word = this.analyzer.wordAtPointFromTextPosition({
       ...params,
       position: {
