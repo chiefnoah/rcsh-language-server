@@ -2,7 +2,7 @@
 /* eslint-disable no-console */
 import * as LSP from 'vscode-languageserver/node'
 
-import BashServer from './server'
+import RcshServer from './server'
 import { DEFAULT_LOG_LEVEL, LOG_LEVEL_ENV_VAR } from './util/logger'
 
 const packageJson = require('../package')
@@ -20,7 +20,7 @@ function printHelp() {
 ${Object.entries(commandsAndFlags)
   .map(
     ([k, description]) =>
-      `  ${`bash-language-server ${k}`.padEnd(PADDING)} ${description}`,
+      `  ${`rcsh-language-server ${k}`.padEnd(PADDING)} ${description}`,
   )
   .join('\n')}
 
@@ -61,7 +61,7 @@ export function listen() {
 
   connection.onInitialize(
     async (params: LSP.InitializeParams): Promise<LSP.InitializeResult> => {
-      const server = await BashServer.initialize(connection, params)
+      const server = await RcshServer.initialize(connection, params)
       server.register(connection)
       return {
         capabilities: server.capabilities(),

@@ -8,26 +8,15 @@ const SHEBANG_REGEXP = /^#!(.+)/
 //      but we do not handle it here, same as `/path/to/env KEY=VAL... <shell>`
 const SHEBANG_INTERPRETER_REGEXP = /^[/](?:[^ /]+[/])*(?:env +(?:-S +)?)?([^ /]+)/
 
-// any empty line, or a comment on an empty line, or a shellcheck directive with
+// any empty line, or a comment on an empty line, or a shell directive with
 // a `shell=...` entry in it
 // (the first continuous run of such lines in a file is the region eligible for
 //  a `shell=...` directive)
-const SHELLCHECK_SHELL_OR_EMPTY_REGEXP =
-  /^\s*(?:#\s*shellcheck\s+(?:\S+\s+)*shell=(\w+)|#|$)/
+const SHELL_DIRECTIVE_OR_EMPTY_REGEXP =
+  /^\s*(?:#\s*(?:shellcheck|rcsh-ls)\s+(?:\S+\s+)*shell=(\w+)|#|$)/
 
-// List of shell dialects that we support for parsing and semantic analysis
-// prettier-ignore
-export const BASH_DIALECTS = [
-  'sh',
-  'bash',
-  'dash',
-  'ksh',
-  'zsh',
-  'csh',
-  'ash',
-  'busybox',
-] as const
-type BashDialect = (typeof BASH_DIALECTS)[number]
+export const RC_DIALECTS = ['rc', 'rcsh'] as const
+type RcDialect = (typeof RC_DIALECTS)[number]
 
 function getShebang(fileContent: string): string | null {
   const match = SHEBANG_REGEXP.exec(fileContent)
@@ -52,7 +41,7 @@ function parseShebang(fileContent: string): string | null {
 function parseShellDirective(fileContent: string): string | null {
   const contentLines = fileContent.split('\n')
   for (const line of contentLines) {
-    const match = SHELLCHECK_SHELL_OR_EMPTY_REGEXP.exec(line)
+    const match = SHELL_DIRECTIVE_OR_EMPTY_REGEXP.exec(line)
     // stop if we have a non-empty non-comment line
     if (match === null) {
       break
@@ -67,8 +56,8 @@ function parseShellDirective(fileContent: string): string | null {
 }
 
 function parseUri(uri: string): string | null {
-  if (uri.endsWith('.zsh')) {
-    return 'zsh'
+  if (uri.endsWith('.rcsh') || uri.endsWith('.rc')) {
+    return 'rcsh'
   }
   return null
 }
@@ -79,17 +68,17 @@ export function analyzeFile(
 ): {
   shebang: string | null
   directive: string | null
-  dialect: BashDialect | null
+  dialect: RcDialect | null
   isDetected: boolean
 } {
   const directive = parseShellDirective(fileContent)
   const shebang = parseShebang(fileContent)
   const parsed = directive ?? shebang ?? parseUri(uri)
-  const dialect = parsed ?? 'bash'
+  const dialect = parsed ?? 'rcsh'
   return {
     shebang,
     directive,
-    dialect: BASH_DIALECTS.includes(dialect as any) ? (dialect as any) : null,
+    dialect: RC_DIALECTS.includes(dialect as any) ? (dialect as any) : null,
     isDetected: parsed !== null,
   }
 }

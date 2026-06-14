@@ -1,6 +1,7 @@
 # Build output
 vscode-client/out
 server/out
+*.tsbuildinfo
 
 # Linter cache
 coverage/
@@ -14,6 +15,7 @@ coverage/
 # NPM cache
 node_modules/
 package-lock.json
+.pnpm-store/
 
 # YARN cache
 .yarn/

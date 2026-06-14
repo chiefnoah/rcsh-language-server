@@ -24,30 +24,47 @@ export function range(n: SyntaxNode): LSP.Range {
 }
 
 export function isDefinition(n: SyntaxNode): boolean {
+  return isFunctionDefinition(n) || isVariableAssignment(n)
+}
+
+export function isReference(n: SyntaxNode): boolean {
   switch (n.type) {
-    case 'variable_assignment':
-    case 'function_definition':
+    case 'variable':
+    case 'word':
       return true
     default:
       return false
   }
 }
 
-export function isReference(n: SyntaxNode): boolean {
-  switch (n.type) {
-    case 'variable_name':
-    case 'command_name':
-      return true
-    default:
-      return false
+export function symbolName(n: SyntaxNode): string {
+  if (n.type !== 'variable') {
+    return n.text
   }
+
+  return n.text.replace(/^\$(?:[#^"])?/, '')
+}
+
+export function isFunctionDefinition(n: SyntaxNode): boolean {
+  return (
+    n.type === 'word' &&
+    n.previousNamedSibling?.type === 'keyword' &&
+    n.previousNamedSibling.text === 'fn'
+  )
+}
+
+export function isVariableAssignment(n: SyntaxNode): boolean {
+  return (
+    n.type === 'word' &&
+    n.nextNamedSibling?.type === 'operator' &&
+    n.nextNamedSibling.text === '='
+  )
 }
 
 export function isVariableInReadCommand(n: SyntaxNode): boolean {
   if (
     n.type === 'word' &&
-    n.parent?.type === 'command' &&
-    n.parent.firstChild?.text === 'read' &&
+    n.previousNamedSibling?.text === 'read' &&
     !n.text.startsWith('-') &&
     !/^-.*[dinNptu]$/.test(n.previousSibling?.text ?? '')
   ) {
@@ -59,8 +76,7 @@ export function isVariableInReadCommand(n: SyntaxNode): boolean {
 
 export function isExpansion(n: SyntaxNode): boolean {
   switch (n.type) {
-    case 'expansion':
-    case 'simple_expansion':
+    case 'variable':
       return true
     default:
       return false
@@ -92,7 +108,7 @@ export function findParentOfType(start: SyntaxNode, type: string | string[]) {
 /**
  * Resolves the full string value of a node
  * Returns null if the value can't be statically determined (ie, it contains a variable or command substition).
- * Supports: word, string, raw_string, and concatenation
+ * Supports: word, quoted_string, string, raw_string, and concatenation
  */
 export function resolveStaticString(node: SyntaxNode): string | null {
   if (node.type === 'concatenation') {
@@ -105,6 +121,7 @@ export function resolveStaticString(node: SyntaxNode): string | null {
     return values.join('')
   }
   if (node.type === 'word') return node.text
+  if (node.type === 'quoted_string') return node.text.slice(1, -1).replace(/''/g, "'")
   if (node.type === 'string' || node.type === 'raw_string') {
     if (node.namedChildCount === 0) return node.text.slice(1, -1)
     const children = node.namedChildren

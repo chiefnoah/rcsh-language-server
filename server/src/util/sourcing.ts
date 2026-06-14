@@ -3,12 +3,10 @@ import * as path from 'path'
 import * as LSP from 'vscode-languageserver'
 import * as Parser from 'web-tree-sitter'
 
-import { parseShellCheckDirective } from '../shellcheck/directive'
-import { discriminate } from './discriminate'
 import { untildify } from './fs'
 import * as TreeSitterUtil from './tree-sitter'
 
-const SOURCING_COMMANDS = ['source', '.']
+const SOURCING_COMMANDS = ['.']
 
 export type SourceCommand = {
   range: LSP.Range
@@ -57,86 +55,22 @@ function getSourcedPathInfoFromNode({
 }: {
   node: Parser.SyntaxNode
 }): null | { sourcedPath?: string; parseError?: string } {
-  if (node.type === 'command') {
-    const [commandNameNode, argumentNode] = node.namedChildren
+  if (node.type === 'word' && SOURCING_COMMANDS.includes(node.text)) {
+    const argumentNode = node.nextNamedSibling
 
-    if (!commandNameNode || !argumentNode) {
+    if (!argumentNode || argumentNode.type === 'terminator') {
       return null
     }
 
-    if (
-      commandNameNode.type === 'command_name' &&
-      SOURCING_COMMANDS.includes(commandNameNode.text)
-    ) {
-      const previousCommentNode =
-        node.previousSibling?.type === 'comment' ? node.previousSibling : null
-
-      if (previousCommentNode?.text.includes('shellcheck')) {
-        const directives = parseShellCheckDirective(previousCommentNode.text)
-        const sourcedPath = directives.find(discriminate('type', 'source'))?.path
-
-        if (sourcedPath === '/dev/null') {
-          return null
-        }
-
-        if (sourcedPath) {
-          return {
-            sourcedPath,
-          }
-        }
-
-        const isNotFollowErrorDisabled = !!directives
-          .filter(discriminate('type', 'disable'))
-          .flatMap(({ rules }) => rules)
-          .find((rule) => rule === 'SC1091')
-
-        if (isNotFollowErrorDisabled) {
-          return null
-        }
-
-        const rootFolder = directives.find(discriminate('type', 'source-path'))?.path
-        if (rootFolder && rootFolder !== 'SCRIPTDIR' && argumentNode.type === 'word') {
-          return {
-            sourcedPath: path.join(rootFolder, argumentNode.text),
-          }
-        }
-      }
-
-      const strValue = TreeSitterUtil.resolveStaticString(argumentNode)
-      if (strValue !== null) {
-        return {
-          sourcedPath: strValue,
-        }
-      }
-
-      // Strip one leading dynamic section.
-      if (argumentNode.type === 'string' && argumentNode.namedChildren.length === 1) {
-        const [variableNode] = argumentNode.namedChildren
-        if (TreeSitterUtil.isExpansion(variableNode)) {
-          const stringContents = argumentNode.text.slice(1, -1)
-          if (stringContents.startsWith(`${variableNode.text}/`)) {
-            return {
-              sourcedPath: `.${stringContents.slice(variableNode.text.length)}`,
-            }
-          }
-        }
-      }
-
-      if (argumentNode.type === 'concatenation') {
-        // Strip one leading dynamic section from a concatenation node.
-        const sourcedPath = resolveSourceFromConcatenation(argumentNode)
-        if (sourcedPath) {
-          return {
-            sourcedPath,
-          }
-        }
-      }
-
-      // TODO: we could try to parse any ShellCheck "source "directive
-      // # shellcheck source=src/examples/config.sh
+    const strValue = TreeSitterUtil.resolveStaticString(argumentNode)
+    if (strValue !== null) {
       return {
-        parseError: `non-constant source not supported`,
+        sourcedPath: strValue,
       }
+    }
+
+    return {
+      parseError: `non-constant source not supported`,
     }
   }
 

@@ -3,7 +3,7 @@
   "scripts": {
     "clean": "rm -rf *.log */*.log */out node_modules vscode-client/node_modules server/node_modules",
     "preinstall": "npx only-allow pnpm",
-    "compile": "tsc -b && cp server/src/get-options.sh server/out/",
+    "compile": "tsc -b",
     "watch": "tsc -b -w",
     "lint": "pnpm lint:bail --fix",
     "lint:bail": "eslint . --ext js,ts,tsx --cache",
@@ -12,8 +12,8 @@
     "test:watch": "pnpm run test --watch",
     "verify": "pnpm lint && pnpm compile && pnpm run test",
     "verify:bail": "pnpm lint:bail && pnpm compile && pnpm test:coverage",
-    "reinstall-server": "npm uninstall -g bash-language-server && pnpm compile && npm i -g ./server",
-    "link-server": "npm uninstall -g bash-language-server && pnpm compile && pnpm unlink --dir=vscode-client bash-language-server && cd server && pnpm link . && cd ../vscode-client && pnpm link bash-language-server",
+    "reinstall-server": "npm uninstall -g rcsh-language-server && pnpm compile && npm i -g ./server",
+    "link-server": "npm uninstall -g rcsh-language-server && pnpm compile && pnpm unlink --dir=vscode-client rcsh-language-server && cd server && pnpm link . && cd ../vscode-client && pnpm link rcsh-language-server",
     "postinstall": "pnpm --dir=vscode-client install --ignore-workspace"
   },
   "devDependencies": {

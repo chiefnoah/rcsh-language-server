@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process'
 import * as path from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
@@ -12,59 +11,46 @@ import * as config from './config'
 import Executables from './executables'
 import { initializeParser } from './parser'
 import * as ReservedWords from './reserved-words'
-import { Linter, LintingResult } from './shellcheck'
-import { Formatter } from './shfmt'
 import { SNIPPETS } from './snippets'
-import { BashCompletionItem, CompletionItemDataType } from './types'
+import { RcCompletionItem, CompletionItemDataType } from './types'
 import { uniqueBasedOnHash } from './util/array'
 import { logger, setLogConnection, setLogLevel } from './util/logger'
 import { isPositionIncludedInRange } from './util/lsp'
 import { getShellDocumentation } from './util/sh'
 
-const PARAMETER_EXPANSION_PREFIXES = new Set(['$', '${'])
-const CONFIGURATION_SECTION = 'bashIde'
+const PARAMETER_EXPANSION_PREFIXES = new Set(['$'])
+const CONFIGURATION_SECTION = 'rcshIde'
 
 /**
- * The BashServer glues together the separate components to implement
+ * The RcshServer glues together the separate components to implement
  * the various parts of the Language Server Protocol.
  */
-export default class BashServer {
+export default class RcshServer {
   private analyzer: Analyzer
   private clientCapabilities: LSP.ClientCapabilities
   private config: config.Config
   private connection: LSP.Connection
   private documents: LSP.TextDocuments<TextDocument> = new LSP.TextDocuments(TextDocument)
   private executables: Executables
-  private linter?: Linter
-  private formatter?: Formatter
   private workspaceFolder: string | null
-  private uriToCodeActions: {
-    [uri: string]: LintingResult['codeActions'] | undefined
-  } = {}
 
   private constructor({
     analyzer,
     capabilities,
     connection,
     executables,
-    linter,
-    formatter,
     workspaceFolder,
   }: {
     analyzer: Analyzer
     capabilities: LSP.ClientCapabilities
     connection: LSP.Connection
     executables: Executables
-    linter?: Linter
-    formatter?: Formatter
     workspaceFolder: string | null
   }) {
     this.analyzer = analyzer
     this.clientCapabilities = capabilities
     this.connection = connection
     this.executables = executables
-    this.linter = linter
-    this.formatter = formatter
     this.workspaceFolder = workspaceFolder
     this.config = {} as any // NOTE: configured in updateConfiguration
     this.updateConfiguration(config.getDefaultConfiguration(), true)
@@ -78,7 +64,7 @@ export default class BashServer {
     connection: LSP.Connection,
     { rootPath, rootUri, capabilities }: LSP.InitializeParams,
   ): // TODO: use workspaceFolders instead of rootPath
-  Promise<BashServer> {
+  Promise<RcshServer> {
     setLogConnection(connection)
 
     logger.debug('Initializing...')
@@ -98,7 +84,7 @@ export default class BashServer {
 
     const executables = await Executables.fromPath(PATH)
 
-    const server = new BashServer({
+    const server = new RcshServer({
       analyzer,
       capabilities,
       connection,
@@ -129,13 +115,7 @@ export default class BashServer {
       documentSymbolProvider: true,
       workspaceSymbolProvider: true,
       referencesProvider: true,
-      codeActionProvider: {
-        codeActionKinds: [LSP.CodeActionKind.QuickFix],
-        resolveProvider: false,
-        workDoneProgress: false,
-      },
       renameProvider: { prepareProvider: true },
-      documentFormattingProvider: true,
     }
   }
 
@@ -164,11 +144,9 @@ export default class BashServer {
 
     this.documents.onDidClose((event) => {
       connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] })
-      delete this.uriToCodeActions[event.document.uri]
     })
 
     // Register all the handlers for the LSP events.
-    connection.onCodeAction(this.onCodeAction.bind(this))
     connection.onCompletion(this.onCompletion.bind(this))
     connection.onCompletionResolve(this.onCompletionResolve.bind(this))
     connection.onDefinition(this.onDefinition.bind(this))
@@ -179,7 +157,6 @@ export default class BashServer {
     connection.onWorkspaceSymbol(this.onWorkspaceSymbol.bind(this))
     connection.onPrepareRename(this.onPrepareRename.bind(this))
     connection.onRenameRequest(this.onRenameRequest.bind(this))
-    connection.onDocumentFormatting(this.onDocumentFormatting.bind(this))
 
     /**
      * The initialized notification is sent from the client to the server after
@@ -219,8 +196,7 @@ export default class BashServer {
 
       initialized = true
       if (currentDocument) {
-        // If we already have a document, analyze it now that we're initialized
-        // and the linter is ready.
+        // If we already have a document, analyze it now that we're initialized.
         this.analyzeAndLintDocument(currentDocument)
       }
 
@@ -235,7 +211,6 @@ export default class BashServer {
         logger.debug('Configuration changed')
         this.startBackgroundAnalysis()
         if (currentDocument) {
-          this.uriToCodeActions[currentDocument.uri] = undefined
           this.analyzeAndLintDocument(currentDocument)
         }
       }
@@ -268,29 +243,6 @@ export default class BashServer {
         if (!isDeepStrictEqual(this.config, newConfig)) {
           this.config = newConfig
 
-          // NOTE: I don't really like this... An alternative would be to pass in the
-          // shellcheck executable path when linting. We would need to handle
-          // resetting the canLint flag though.
-
-          const { shellcheckPath } = this.config
-          if (!shellcheckPath) {
-            logger.info('ShellCheck linting is disabled as "shellcheckPath" was not set')
-            this.linter = undefined
-          } else {
-            this.linter = new Linter({
-              executablePath: shellcheckPath,
-              externalSources: this.config.shellcheckExternalSources,
-            })
-          }
-
-          const shfmtPath = this.config.shfmt?.path
-          if (!shfmtPath) {
-            logger.info('Shfmt formatting is disabled as "shfmt.path" was not set')
-            this.formatter = undefined
-          } else {
-            this.formatter = new Formatter({ executablePath: shfmtPath })
-          }
-
           this.analyzer.setEnableSourceErrorDiagnostics(
             this.config.enableSourceErrorDiagnostics,
           )
@@ -322,23 +274,7 @@ export default class BashServer {
     const { uri } = document
 
     // Load the tree for the modified contents into the analyzer:
-    let diagnostics = this.analyzer.analyze({ uri, document })
-
-    // Run ShellCheck diagnostics:
-    if (this.linter) {
-      try {
-        const sourceFolders = this.workspaceFolder ? [this.workspaceFolder] : []
-        const { diagnostics: lintDiagnostics, codeActions } = await this.linter.lint(
-          document,
-          sourceFolders,
-          this.config.shellcheckArguments,
-        )
-        diagnostics = diagnostics.concat(lintDiagnostics)
-        this.uriToCodeActions[uri] = codeActions
-      } catch (err) {
-        logger.error(`Error while linting: ${err}`)
-      }
-    }
+    const diagnostics = this.analyzer.analyze({ uri, document })
 
     this.connection.sendDiagnostics({ uri, version: document.version, diagnostics })
   }
@@ -364,7 +300,7 @@ export default class BashServer {
   }: {
     symbols: LSP.SymbolInformation[]
     currentUri: string
-  }): BashCompletionItem[] {
+  }): RcCompletionItem[] {
     return deduplicateSymbols({ symbols, currentUri }).map(
       (symbol: LSP.SymbolInformation) => ({
         label: symbol.name,
@@ -419,19 +355,7 @@ export default class BashServer {
   // Language server event handlers
   // ==============================
 
-  private async onCodeAction(params: LSP.CodeActionParams): Promise<LSP.CodeAction[]> {
-    const codeActionsForUri = this.uriToCodeActions[params.textDocument.uri] || {}
-
-    const codeActions = params.context.diagnostics
-      .map(({ data }) => codeActionsForUri[data?.id])
-      .filter((action): action is LSP.CodeAction => action != null)
-
-    logger.debug(`onCodeAction: found ${codeActions.length} code action(s)`)
-
-    return codeActions
-  }
-
-  private onCompletion(params: LSP.TextDocumentPositionParams): BashCompletionItem[] {
+  private onCompletion(params: LSP.TextDocumentPositionParams): RcCompletionItem[] {
     const word = this.analyzer.wordAtPointFromTextPosition({
       ...params,
       position: {
@@ -530,45 +454,11 @@ export default class BashServer {
       },
     }))
 
-    let optionsCompletions: BashCompletionItem[] = []
-    if (word?.startsWith('-')) {
-      const commandName = this.analyzer.commandNameAtPoint(
-        params.textDocument.uri,
-        params.position.line,
-        // Go one character back to get completion on the current word
-        Math.max(params.position.character - 1, 0),
-      )
-
-      if (commandName) {
-        optionsCompletions = getCommandOptions(commandName, word).map((option) => ({
-          label: option,
-          kind: LSP.CompletionItemKind.Constant,
-          data: {
-            type: CompletionItemDataType.Symbol,
-          },
-          textEdit: {
-            newText: option.slice(word.length),
-            range: {
-              start: {
-                character: params.position.character,
-                line: params.position.line,
-              },
-              end: {
-                character: params.position.character,
-                line: params.position.line,
-              },
-            },
-          },
-        }))
-      }
-    }
-
     const allCompletions = [
       ...reservedWordsCompletions,
       ...symbolCompletions,
       ...programCompletions,
       ...builtinsCompletions,
-      ...optionsCompletions,
       ...SNIPPETS,
     ]
 
@@ -586,7 +476,7 @@ export default class BashServer {
     const {
       label,
       data: { type },
-    } = item as BashCompletionItem
+    } = item as RcCompletionItem
 
     logger.debug(`onCompletionResolve label=${label} type=${type}`)
 
@@ -826,25 +716,6 @@ export default class BashServer {
     return edits
   }
 
-  private async onDocumentFormatting(
-    params: LSP.DocumentFormattingParams,
-  ): Promise<LSP.TextEdit[] | null> {
-    if (this.formatter) {
-      try {
-        const document = this.documents.get(params.textDocument.uri)
-        if (!document) {
-          logger.error(`Error getting document: ${params.textDocument.uri}`)
-          return null
-        }
-
-        return await this.formatter.format(document, params.options, this.config.shfmt)
-      } catch (err) {
-        logger.error(`Error while formatting: ${err}`)
-      }
-    }
-
-    return null
-  }
 }
 
 /**
@@ -950,18 +821,4 @@ function getMarkdownContent(documentation: string, language?: string): LSP.Marku
       : documentation,
     kind: LSP.MarkupKind.Markdown,
   }
-}
-
-export function getCommandOptions(name: string, word: string): string[] {
-  const options = spawnSync(path.join(__dirname, './get-options.sh'), [name, word])
-
-  if (options.status !== 0) {
-    return []
-  }
-
-  return options.stdout
-    .toString()
-    .split('\t')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
 }

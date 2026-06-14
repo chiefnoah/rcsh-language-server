@@ -8,7 +8,7 @@ export enum CompletionItemDataType {
   Snippet,
 }
 
-export interface BashCompletionItem extends LSP.CompletionItem {
+export interface RcCompletionItem extends LSP.CompletionItem {
   data: {
     type: CompletionItemDataType
   }

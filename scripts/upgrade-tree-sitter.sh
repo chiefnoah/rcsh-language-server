@@ -2,13 +2,17 @@
 
 set -euox pipefail
 
-cd server
-pnpm add web-tree-sitter
-pnpm add --save-dev tree-sitter-cli https://github.com/tree-sitter/tree-sitter-bash
-npx tree-sitter build --wasm node_modules/tree-sitter-bash
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+grammar_path="${1:-${TREE_SITTER_RCSH_PATH:-$HOME/repos/tree-sitter-rcsh}}"
 
-curl 'https://api.github.com/repos/tree-sitter/tree-sitter-bash/commits/master' | jq .commit.url > parser.info
-echo "tree-sitter-cli $(cat package.json | jq '.devDependencies["tree-sitter-cli"]')" >> parser.info
+if ! [ -d "$grammar_path" ]; then
+	echo "tree-sitter-rcsh grammar not found: $grammar_path" >&2
+	exit 1
+fi
 
-pnpm remove tree-sitter-cli tree-sitter-bash
+make -C "$grammar_path" wasm-nix
+cp "$grammar_path/tree-sitter-rcsh.wasm" "$repo_root/server/tree-sitter-rcsh.wasm"
 
+git -C "$grammar_path" remote get-url origin > "$repo_root/server/parser.info"
+git -C "$grammar_path" rev-parse HEAD >> "$repo_root/server/parser.info"
+echo 'tree-sitter-cli "0.24.7"' >> "$repo_root/server/parser.info"

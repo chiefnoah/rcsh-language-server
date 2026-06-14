@@ -1,26 +1,11 @@
-// https://www.gnu.org/software/bash/manual/html_node/Reserved-Word-Index.html
-
 export const LIST = [
-  '!',
-  '[[',
-  ']]',
-  '{',
-  '}',
   'case',
-  'do',
-  'done',
-  'elif',
   'else',
-  'esac',
-  'fi',
+  'fn',
   'for',
-  'function',
   'if',
   'in',
-  'select',
-  'then',
-  'time',
-  'until',
+  'switch',
   'while',
 ]
 

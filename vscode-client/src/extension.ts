@@ -11,13 +11,13 @@ import {
 
 let client: LanguageClient | undefined
 
-export const CONFIGURATION_SECTION = 'bashIde' // matching the package.json configuration section
+export const CONFIGURATION_SECTION = 'rcshIde' // matching the package.json configuration section
 
 export async function activate(context: ExtensionContext) {
   const config = workspace.getConfiguration(CONFIGURATION_SECTION)
   const env: any = {
     ...process.env,
-    BASH_IDE_LOG_LEVEL: config.get('logLevel', ''),
+    RCSH_IDE_LOG_LEVEL: config.get('logLevel', ''),
   }
 
   const serverExecutable = {
@@ -44,7 +44,7 @@ export async function activate(context: ExtensionContext) {
   // NOTE: To debug a server running in a process, use the following instead:
   // This requires the server to be globally installed.
   // const serverOptions = {
-  //   command: 'bash-language-server',
+  //   command: 'rcsh-language-server',
   //   args: ['start'],
   // }
 
@@ -52,7 +52,7 @@ export async function activate(context: ExtensionContext) {
     documentSelector: [
       {
         scheme: 'file',
-        language: 'shellscript',
+        language: 'rcsh',
       },
     ],
     synchronize: {
@@ -60,7 +60,7 @@ export async function activate(context: ExtensionContext) {
     },
   }
 
-  client = new LanguageClient('Bash IDE', 'Bash IDE', serverOptions, clientOptions)
+  client = new LanguageClient('rcsh IDE', 'rcsh IDE', serverOptions, clientOptions)
   client.registerProposedFeatures()
 
   try {

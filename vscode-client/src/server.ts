@@ -1,4 +1,4 @@
-import BashLanguageServer from 'bash-language-server'
+import RcshLanguageServer from 'rcsh-language-server'
 import {
   createConnection,
   InitializeParams,
@@ -9,7 +9,7 @@ import {
 const connection = createConnection(ProposedFeatures.all)
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
-  const server = await BashLanguageServer.initialize(connection, params)
+  const server = await RcshLanguageServer.initialize(connection, params)
   server.register(connection)
   return {
     capabilities: server.capabilities(),

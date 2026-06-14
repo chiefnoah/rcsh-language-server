@@ -112,16 +112,13 @@ export default class Analyzer {
                 sourceCommand.range,
                 [
                   `Source command could not be analyzed: ${sourceCommand.error}.\n`,
-                  'Consider adding a ShellCheck directive above this line to fix or ignore this:',
-                  '# shellcheck source=/my-file.sh # specify the file to source',
-                  '# shellcheck source-path=my_script_folder # specify the folder to search in',
-                  '# shellcheck source=/dev/null # to ignore the error',
+                  'Use a constant . command path or enable includeAllWorkspaceSymbols to ignore source resolution.',
                   '',
                   'Disable this message by changing the configuration option "enableSourceErrorDiagnostics"',
                 ].join('\n'),
                 LSP.DiagnosticSeverity.Information,
                 undefined,
-                'bash-language-server',
+                'rcsh-language-server',
               ),
             )
           }
@@ -204,7 +201,7 @@ export default class Analyzer {
         }
 
         this.analyze({
-          document: TextDocument.create(uri, 'shell', 1, fileContent),
+          document: TextDocument.create(uri, 'rcsh', 1, fileContent),
           uri,
         })
       } catch (error) {
@@ -307,11 +304,12 @@ export default class Analyzer {
     let declaration: Parser.SyntaxNode | null | undefined
     let continueSearching = false
 
-    // Search for local declaration within parents
+    // rcsh grammar currently exposes a flat token stream, so there are no
+    // reliable local scope nodes to search here.
     while (parent) {
       if (
         params.kind === LSP.SymbolKind.Variable &&
-        parent.type === 'function_definition' &&
+        TreeSitterUtil.isFunctionDefinition(parent) &&
         parent.lastChild
       ) {
         ;({ declaration, continueSearching } = findDeclarationUsingLocalSemantics({
@@ -319,7 +317,7 @@ export default class Analyzer {
           symbolInfo: params,
           otherInfo,
         }))
-      } else if (parent.type === 'subshell') {
+      } else if (parent.type === 'source_file') {
         ;({ declaration, continueSearching } = findDeclarationUsingGlobalSemantics({
           baseNode: parent,
           symbolInfo: params,
@@ -413,12 +411,12 @@ export default class Analyzer {
 
       if (TreeSitterUtil.isReference(n)) {
         // NOTE: a reference can be a command, variable, function, etc.
-        namedNode = n.firstNamedChild || n
+        namedNode = n
       } else if (TreeSitterUtil.isDefinition(n)) {
-        namedNode = n.firstNamedChild
+        namedNode = n
       }
 
-      if (namedNode && namedNode.text === word) {
+      if (namedNode && TreeSitterUtil.symbolName(namedNode) === word) {
         const range = TreeSitterUtil.range(namedNode)
 
         const alreadyInLocations = locations.some((loc) => {
@@ -458,119 +456,39 @@ export default class Analyzer {
           { row: scope.end.line, column: scope.end.character },
         )
       : null
-    const baseNode =
-      scopeNode && (kind === LSP.SymbolKind.Variable || scopeNode.type === 'subshell')
-        ? scopeNode
-        : this.uriToAnalyzedDocument[uri]?.tree.rootNode
+    const baseNode = scopeNode ?? this.uriToAnalyzedDocument[uri]?.tree.rootNode
 
     if (!baseNode) {
       return []
     }
 
-    const typeOfDescendants =
-      kind === LSP.SymbolKind.Variable
-        ? ['variable_name', 'word']
-        : ['function_definition', 'command_name']
+    const typeOfDescendants = kind === LSP.SymbolKind.Variable ? ['variable', 'word'] : ['word']
     const startPosition = start
       ? { row: start.line, column: start.character }
       : baseNode.startPosition
 
-    const ignoredRanges: LSP.Range[] = []
     const filterVariables = (n: Parser.SyntaxNode) => {
       if (
-        n.text !== word ||
-        (n.type === 'word' && !TreeSitterUtil.isVariableInReadCommand(n))
+        TreeSitterUtil.symbolName(n) !== word ||
+        (n.type === 'word' && !TreeSitterUtil.isVariableAssignment(n))
       ) {
         return false
       }
 
-      const definition = TreeSitterUtil.findParentOfType(n, 'variable_assignment')
-      const definedVariable = definition?.descendantsOfType('variable_name').at(0)
-
-      // For self-assignment `var=$var` cases; this decides whether `$var` is an
-      // occurrence or not.
-      if (definedVariable?.text === word && !n.equals(definedVariable)) {
-        // `start.line` is assumed to be the same as the variable's original
-        // declaration line; handles cases where `$var` shouldn't be considered
-        // an occurrence.
-        if (definition?.startPosition.row === start?.line) {
-          return false
-        }
-
-        // Returning true here is a good enough heuristic for most cases. It
-        // breaks down when redeclaration happens in multiple nested scopes,
-        // handling those more complex situations can be done later on if use
-        // cases arise.
-        return true
-      }
-
-      const parent = this.parentScope(n)
-
-      if (!parent || baseNode.equals(parent)) {
-        return true
-      }
-
-      const includeDeclaration = !ignoredRanges.some(
-        (r) => n.startPosition.row > r.start.line && n.endPosition.row < r.end.line,
-      )
-
-      const declarationCommand = TreeSitterUtil.findParentOfType(n, 'declaration_command')
-      const isLocal =
-        // Local `variable_name`s
-        ((definedVariable?.text === word || !!(!definition && declarationCommand)) &&
-          (parent.type === 'subshell' ||
-            ['local', 'declare', 'typeset'].includes(
-              declarationCommand?.firstChild?.text as any,
-            ))) ||
-        // Local variables within `read` command that are typed as `word`
-        (parent.type === 'subshell' && n.type === 'word')
-      if (isLocal) {
-        if (includeDeclaration) {
-          ignoredRanges.push(TreeSitterUtil.range(parent))
-        }
-
-        return false
-      }
-
-      return includeDeclaration
+      return true
     }
     const filterFunctions = (n: Parser.SyntaxNode) => {
-      const text = n.type === 'function_definition' ? n.firstNamedChild?.text : n.text
-      if (text !== word) {
+      if (TreeSitterUtil.symbolName(n) !== word) {
         return false
       }
 
-      const parentScope = TreeSitterUtil.findParentOfType(n, 'subshell')
-
-      if (!parentScope || baseNode.equals(parentScope)) {
-        return true
-      }
-
-      const includeDeclaration = !ignoredRanges.some(
-        (r) => n.startPosition.row > r.start.line && n.endPosition.row < r.end.line,
-      )
-
-      if (n.type === 'function_definition') {
-        if (includeDeclaration) {
-          ignoredRanges.push(TreeSitterUtil.range(parentScope))
-        }
-
-        return false
-      }
-
-      return includeDeclaration
+      return n.type === 'word' && !TreeSitterUtil.isVariableAssignment(n)
     }
 
     return baseNode
       .descendantsOfType(typeOfDescendants, startPosition)
       .filter(kind === LSP.SymbolKind.Variable ? filterVariables : filterFunctions)
-      .map((n) => {
-        if (n.type === 'function_definition' && n.firstNamedChild) {
-          return TreeSitterUtil.range(n.firstNamedChild)
-        }
-
-        return TreeSitterUtil.range(n)
-      })
+      .map((n) => TreeSitterUtil.range(n))
   }
 
   public getAllVariables({
@@ -672,21 +590,15 @@ export default class Analyzer {
   public commandNameAtPoint(uri: string, line: number, column: number): string | null {
     let node = this.nodeAtPoint(uri, line, column)
 
-    while (node && node.type !== 'command') {
-      node = node.parent
+    while (node?.previousNamedSibling && node.previousNamedSibling.type !== 'terminator') {
+      node = node.previousNamedSibling
     }
 
-    if (!node) {
+    if (!node || node.type !== 'word') {
       return null
     }
 
-    const firstChild = node.firstNamedChild
-
-    if (!firstChild || firstChild.type !== 'command_name') {
-      return null
-    }
-
-    return firstChild.text.trim()
+    return node.text.trim()
   }
 
   /**
@@ -753,7 +665,7 @@ export default class Analyzer {
       return null
     }
 
-    return node.text.trim()
+    return TreeSitterUtil.symbolName(node).trim()
   }
 
   public wordAtPointFromTextPosition(
@@ -780,15 +692,16 @@ export default class Analyzer {
     }
 
     if (
-      node.type === 'variable_name' ||
+      node.type === 'variable' ||
       (node.type === 'word' &&
-        ['function_definition', 'command_name'].includes(node.parent?.type as any))
+        (TreeSitterUtil.isFunctionDefinition(node) ||
+          !TreeSitterUtil.isVariableAssignment(node)))
     ) {
       return {
-        word: node.text,
+        word: TreeSitterUtil.symbolName(node),
         range: TreeSitterUtil.range(node),
         kind:
-          node.type === 'variable_name'
+          node.type === 'variable' || TreeSitterUtil.isVariableAssignment(node)
             ? LSP.SymbolKind.Variable
             : LSP.SymbolKind.Function,
       }
@@ -796,7 +709,7 @@ export default class Analyzer {
 
     if (TreeSitterUtil.isVariableInReadCommand(node)) {
       return {
-        word: node.text,
+        word: TreeSitterUtil.symbolName(node),
         range: TreeSitterUtil.range(node),
         kind: LSP.SymbolKind.Variable,
       }
@@ -1025,18 +938,10 @@ export default class Analyzer {
   }
 
   /**
-   * Returns the parent `subshell` or `function_definition` of the given `node`.
-   * To disambiguate between regular `subshell`s and `subshell`s that serve as a
-   * `function_definition`'s body, this only returns a `function_definition` if
-   * its body is a `compound_statement`.
+   * Returns the parent scope of the given `node`.
    */
   private parentScope(node: Parser.SyntaxNode): Parser.SyntaxNode | null {
-    return TreeSitterUtil.findParent(
-      node,
-      (n) =>
-        n.type === 'subshell' ||
-        (n.type === 'function_definition' && n.lastChild?.type === 'compound_statement'),
-    )
+    return TreeSitterUtil.findParent(node, (n) => n.type === 'source_file')
   }
 
   /**
