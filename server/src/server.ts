@@ -484,9 +484,13 @@ export default class RcshServer {
       let documentation = null
 
       if (
-        type === CompletionItemDataType.Executable ||
-        type === CompletionItemDataType.Builtin ||
-        type === CompletionItemDataType.ReservedWord
+        type === CompletionItemDataType.Builtin
+      ) {
+        documentation = Builtins.documentationFor(label)
+      } else if (type === CompletionItemDataType.ReservedWord) {
+        documentation = ReservedWords.documentationFor(label)
+      } else if (
+        type === CompletionItemDataType.Executable
       ) {
         documentation = await getShellDocumentation({ word: label })
       }
@@ -494,7 +498,7 @@ export default class RcshServer {
       return documentation
         ? {
             ...item,
-            documentation: getMarkdownContent(documentation, 'man'),
+            documentation: getMarkdownContent(documentation),
           }
         : item
     } catch (error) {
@@ -580,12 +584,18 @@ export default class RcshServer {
     })
     if (
       ReservedWords.isReservedWord(word) ||
-      Builtins.isBuiltin(word) ||
-      (this.executables.isExecutableOnPATH(word) && symbolsMatchingWord.length == 0)
+      Builtins.isBuiltin(word)
     ) {
       logger.debug(
-        `onHover: getting shell documentation for reserved word or builtin or executable`,
+        `onHover: getting rc documentation for reserved word or builtin`,
       )
+      const rcDocumentation =
+        Builtins.documentationFor(word) ?? ReservedWords.documentationFor(word)
+      if (rcDocumentation) {
+        return { contents: getMarkdownContent(rcDocumentation) }
+      }
+    } else if (this.executables.isExecutableOnPATH(word) && symbolsMatchingWord.length == 0) {
+      logger.debug(`onHover: getting shell documentation for executable`)
       const shellDocumentation = await getShellDocumentation({ word })
       if (shellDocumentation) {
         return { contents: getMarkdownContent(shellDocumentation, 'man') }

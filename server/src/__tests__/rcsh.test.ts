@@ -137,6 +137,60 @@ describe('rcsh server', () => {
     )
   })
 
+  it('resolves rc builtin completion documentation', async () => {
+    const onCompletionResolve = connection.onCompletionResolve.mock.calls[0][0]
+    const completion = (await onCompletionResolve(
+      {
+        label: 'cd',
+        data: { type: CompletionItemDataType.Builtin },
+      },
+      {} as any,
+    )) as LSP.CompletionItem
+
+    expect(completion.documentation).toEqual({
+      kind: 'markdown',
+      value: expect.stringContaining('**rc builtin:** `cd [directory]`'),
+    })
+    expect((completion.documentation as LSP.MarkupContent).value).not.toContain('OLDPWD')
+  })
+
+  it('returns rc documentation on builtin and keyword hover', async () => {
+    const doc = document(['echo hi', 'if (~ $status 0) echo ok', ''].join('\n'))
+    await server.analyzeAndLintDocument(doc)
+
+    const onHover = connection.onHover.mock.calls[0][0]
+    const builtinHover = (await onHover(
+      {
+        textDocument: { uri },
+        position: { line: 0, character: 1 },
+      },
+      {} as any,
+      {} as any,
+    )) as LSP.Hover
+    const keywordHover = (await onHover(
+      {
+        textDocument: { uri },
+        position: { line: 1, character: 1 },
+      },
+      {} as any,
+      {} as any,
+    )) as LSP.Hover
+
+    expect(builtinHover).toEqual({
+      contents: {
+        kind: 'markdown',
+        value: expect.stringContaining('**rc builtin:** `echo [-n] [--] [arg ...]`'),
+      },
+    })
+    expect((builtinHover?.contents as LSP.MarkupContent).value).not.toContain('-e')
+    expect(keywordHover).toEqual({
+      contents: {
+        kind: 'markdown',
+        value: expect.stringContaining('**rc keyword:** `if (test) command [else command]`'),
+      },
+    })
+  })
+
   it('renames function definitions and calls', async () => {
     const doc = document(['fn greet {', '\techo hi', '}', 'greet', ''].join('\n'))
     await server.analyzeAndLintDocument(doc)
